@@ -35,6 +35,8 @@ class VisualGridHuntGame:
             if tuple(op_pos) != (0, 0) and tuple(op_pos) not in self.walls and tuple(op_pos) not in self.food_positions:
                 self.opponents.append(op_pos)
 
+        self.toxic_trap= {(3, 4), (6, 2), (8, 8)}
+
         self.score = 0
         self.steps = 0
         self.collision = False
@@ -47,7 +49,8 @@ class VisualGridHuntGame:
             'hit_wall': tuple(self.agent_pos) in self.walls,
             'collision': self.collision,
             'score': self.score,
-            'remaining_food': len(self.food_positions)
+            'remaining_food': len(self.food_positions),
+            'smells_toxin':tuple(self.agent_pos) in self.toxic_trap
         }
 
     def execute_action(self, action: str):
@@ -87,6 +90,9 @@ class VisualGridHuntGame:
             if op == self.agent_pos:
                 self.score -= 50
                 self.collision = True
+
+        if tuple_pos in self.toxic_trap:
+            self.score -= 15
 
     def is_done(self) -> bool:
         return len(self.food_positions) == 0 or self.steps >= 60 or self.collision
@@ -160,6 +166,13 @@ class GridGameGUI:
         self.canvas.create_oval(x1, y1, x1 + self.cell_size * 0.7, y1 + self.cell_size * 0.7, fill="#000066",
                                 outline="#1e3a8a")
 
+        for tx, ty in self.env.toxic_trap:
+            offset = self.cell_size * 0.2
+            x1 = tx * self.cell_size + offset
+            y1 = (self.env.height - 1 - ty) * self.cell_size + offset
+            self.canvas.create_rectangle(x1, y1, x1 + self.cell_size * 0.6, y1 + self.cell_size * 0.6, fill="#4b0082",
+                                         outline="#3a0066")
+
     def run_loop(self):
         self.btn.config(state="disabled")
 
@@ -182,5 +195,5 @@ class GridGameGUI:
 if __name__ == "__main__":
     root = tk.Tk()
     # Try a larger grid size like 12x12 with 15 food and 3 opponents!
-    app = GridGameGUI(root, width=12, height=12, num_food=15, num_opponents=0)
+    app = GridGameGUI(root, width=12, height=12, num_food=15, num_opponents=2)
     root.mainloop()
