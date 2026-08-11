@@ -2,6 +2,10 @@
 import random
 import tkinter as tk
 
+from SimpleReflexAgent import SimpleReflexAgent
+from ModelBasedAgent import ModelBasedAgent
+import agent
+
 
 class VisualGridHuntGame:
     """A flexible Pacman-style grid environment with support for configurable opponents and larger scales."""
@@ -10,6 +14,7 @@ class VisualGridHuntGame:
         self.width = width
         self.height = height
         self.agent_pos = [0, 0]  # Starting position (x, y)
+        self.agent_dir='Up' 
 
         if custom_walls is not None:
             self.walls = set(custom_walls)
@@ -42,20 +47,37 @@ class VisualGridHuntGame:
         self.collision = False
 
     def get_percept(self) -> dict:
+
+        x, y = self.agent_pos
+
+        dir_offsets = {
+            'Up': (0, 1),
+            'Down': (0, -1),
+            'Left': (-1, 0),
+            'Right': (1, 0)
+        }
+        dx, dy = dir_offsets[self.agent_dir]
+        ahead_pos = (x + dx, y + dy)
+
+        out_of_bounds = not (0 <= ahead_pos[0] < self.width and 0 <= ahead_pos[1] < self.height)
+        wall_ahead = ahead_pos in self.walls or out_of_bounds
+
         return {
-            'agent_pos': list(self.agent_pos),
-            'opponent_positions': [list(op) for op in self.opponents],
-            'smells_food': tuple(self.agent_pos) in self.food_positions,
-            'hit_wall': tuple(self.agent_pos) in self.walls,
+            'wall_ahead': wall_ahead,
+            'food_ahead': ahead_pos in self.food_positions,
+            'food_here':tuple(self.agent_pos) in self.food_positions,
+            'toxin_here': tuple(self.agent_pos) in self.toxic_trap,
             'collision': self.collision,
             'score': self.score,
-            'remaining_food': len(self.food_positions),
-            'smells_toxin':tuple(self.agent_pos) in self.toxic_trap
+            'remaining_food': len(self.food_positions)
         }
 
     def execute_action(self, action: str):
         self.steps += 1
         new_pos = list(self.agent_pos)
+
+        if action in ['Up', 'Down', 'Left', 'Right']:
+            self.agent_dir = action  
 
         if action == 'Up':
             new_pos[1] = min(self.height - 1, new_pos[1] + 1)
@@ -101,12 +123,14 @@ class VisualGridHuntGame:
 class GridGameGUI:
     """Tkinter wrapper that dynamically scales cell sizes to keep larger grids on screen."""
 
-    def __init__(self, root, width=10, height=10, num_food=12, num_opponents=2, walls=None):
+    def __init__(self, root, width=10, height=10, num_food=12, num_opponents=2, walls=None, agent=None):
         self.root = root
         self.root.title("IT3012 - Scalable Multi-Agent Grid Hunt")
 
         self.env = VisualGridHuntGame(width=width, height=height, num_food=num_food, num_opponents=num_opponents,
                                       custom_walls=walls)
+
+        self.agent=agent if agent is not None else SimpleReflexAgent()  # Default to SimpleReflexAgent if none provided
 
         # Dynamically calculate cell size so the total canvas fits nicely within a 600x600 window ceiling
         max_canvas_dim = 600
@@ -178,8 +202,13 @@ class GridGameGUI:
 
         def step():
             if not self.env.is_done():
-                action = random.choice(['Up', 'Down', 'Left', 'Right'])
-                self.env.execute_action(action)
+                percept = self.env.get_percept()
+                action = self.agent.sense_and_act(percept)
+
+                if action == 'Stay':
+                    self.env.steps += 1  # Increment steps even if the agent stays in place
+                else:
+                    self.env.execute_action(action)
 
                 self.draw_grid()
                 self.label.config(text=f"Score: {self.env.score} | Steps: {self.env.steps} | Action: {action}")
@@ -194,6 +223,10 @@ class GridGameGUI:
 
 if __name__ == "__main__":
     root = tk.Tk()
+
+
+    chosen_agent = ModelBasedAgent()  # Change to SimpleReflexAgent() to test the reflex agent
+
     # Try a larger grid size like 12x12 with 15 food and 3 opponents!
-    app = GridGameGUI(root, width=12, height=12, num_food=15, num_opponents=2)
+    app = GridGameGUI(root, width=12, height=12, num_food=15, num_opponents=2, agent=chosen_agent)
     root.mainloop()

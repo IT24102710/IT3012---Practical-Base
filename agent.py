@@ -1,3 +1,7 @@
+import random
+
+from SimpleReflexAgent import SimpleReflexAgent
+from ModelBasedAgent import ModelBasedAgent
 # agent.py
 class GreedyGridAgent:
     """A simple agent that tries to move around systematically to clear the grid."""
