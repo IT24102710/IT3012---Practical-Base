@@ -70,7 +70,7 @@ class VisualGridHuntGame:
             'collision': self.collision,
             'score': self.score,
             'remaining_food': len(self.food_positions),
-            'agent_pos': list(self.agent_pos),   
+            'agent_pos': list(self.agent_pos),   # needed so SearchAgent knows where to start the search from
             'grid_size': (self.width, self.height),
             'walls': list(self.walls),
             'all_food': list(self.food_positions)
@@ -229,7 +229,9 @@ if __name__ == "__main__":
     root = tk.Tk()
 
 
-    chosen_agent = ModelBasedAgent()  # Change to SimpleReflexAgent() to test the reflex agent
+    chosen_agent = agent.SearchAgent()   
+    chosen_agent.active_algo = 'AStar'   # Switch between 'BFS', 'DFS', 'UCS', 'AStar' to compare
+    # chosen_agent = ModelBasedAgent()   # Change to SimpleReflexAgent() to test the reflex agent
 
     # Try a larger grid size like 12x12 with 15 food and 3 opponents!
     app = GridGameGUI(root, width=12, height=12, num_food=15, num_opponents=2, agent=chosen_agent)
