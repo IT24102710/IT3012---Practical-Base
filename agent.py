@@ -5,6 +5,7 @@ from collections import deque
 
 from SimpleReflexAgent import SimpleReflexAgent
 from ModelBasedAgent import ModelBasedAgent
+from logic_engine import KnowledgeBase
 # agent.py
 class GreedyGridAgent:
     """A simple agent that tries to move around systematically to clear the grid."""
@@ -38,6 +39,14 @@ class SearchAgent:
     def __init__(self):
         self.plan = []                # Step 1.3.1: holds the queued sequence of actions
         self.active_algo = 'BFS'      # Step 1.3.1: 'BFS', 'DFS', or 'UCS'
+
+        # Part 3 (Practical 05): Knowledge Base for logical feasibility checking
+        self.kb = KnowledgeBase()
+
+        # Rule 1: TargetVisible ∧ HasDust ⇒ SafeToEngage
+        self.kb.tell_rule(['TargetVisible', 'HasDust'], 'SafeToEngage')
+        # Rule 2: SafeToEngage ∧ BloodseekerMissing ⇒ Retreat
+        self.kb.tell_rule(['SafeToEngage', 'BloodseekerMissing'], 'Retreat')
 
     # -- helpers -------------------------------------------------------
 
@@ -153,10 +162,16 @@ class SearchAgent:
         return math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
  
  
-    def astar_search(self, start_pos, goal_pos, walls, grid_size, heuristic_type='manhattan'):
+    def astar_search(self, start_pos, goal_pos, walls, grid_size, heuristic_type='manhattan',
+                     percept=None):
         """
         A* Search: f(n) = g(n) + h(n).
         Frontier entries: (f_cost, g_cost, current_pos, path_taken)
+
+        Step 3.2 (Practical 05): Before expanding a neighbor, the KB is
+        consulted to verify the tile is logically *Feasible* (not just
+        physically reachable).  If 'Retreat' is inferred, the tile is
+        marked Infeasible and skipped.
         """
         start, goal = tuple(start_pos), tuple(goal_pos)
         walls = set(tuple(w) for w in walls)
@@ -166,6 +181,11 @@ class SearchAgent:
         if start == goal:
             return []
  
+        # Build helper sets from the percept for fast tile-level KB assertions
+        food_set = set(tuple(f) for f in (percept.get('all_food', []) if percept else []))
+        opponent_set = set(tuple(o) for o in (percept.get('opponents', []) if percept else []))
+        toxic_set = set(tuple(t) for t in (percept.get('toxic_traps', []) if percept else []))
+
         counter = 0  # tie-breaker so heapq never compares path lists directly
         g_start = 0
         h_start = heuristic_fn(start, goal)
@@ -187,6 +207,33 @@ class SearchAgent:
             for action, neighbor in self._get_neighbors(current_pos, walls, grid_size):
                 if neighbor in reached_states:
                     continue
+
+                # ----------------------------------------------------------
+                # Step 3.2: KB Feasibility Check
+                # 1. Clear all previous percept-facts for this tile evaluation
+                self.kb.clear_facts()
+
+                # 2. Feed tile-specific percepts into the KB
+                if neighbor in food_set:
+                    self.kb.tell_fact('TargetVisible')
+                if neighbor in toxic_set:
+                    # A toxic trap acts like a HasDust threat
+                    self.kb.tell_fact('HasDust')
+                    self.kb.tell_fact('BloodseekerMissing')   # no safe escort → must Retreat
+                if neighbor in opponent_set:
+                    # An opponent tile also triggers all threat signals
+                    self.kb.tell_fact('TargetVisible')
+                    self.kb.tell_fact('HasDust')
+                    self.kb.tell_fact('BloodseekerMissing')
+
+                # 3. Run the inference engine
+                self.kb.forward_chain()
+
+                # 4. If 'Retreat' is deduced, the tile is Infeasible — skip it
+                if 'Retreat' in self.kb.facts:
+                    continue   # logically infeasible: do not add to open list
+                # ----------------------------------------------------------
+
                 g_new = g_cost + 1
                 h_new = heuristic_fn(neighbor, goal)
                 f_new = g_new + h_new
@@ -194,6 +241,7 @@ class SearchAgent:
                 heapq.heappush(frontier, (f_new, g_new, counter, neighbor, path_taken + [action]))
  
         return None  # No path found
+
  
 
     def sense_and_act(self, percept: dict) -> str:
@@ -220,7 +268,8 @@ class SearchAgent:
             elif self.active_algo == 'UCS':
                 path = self.ucs_search(agent_pos, goal, walls, grid_size)
             elif self.active_algo == 'AStar':
-                path = self.astar_search(agent_pos, goal, walls, grid_size, heuristic_type='manhattan')
+                path = self.astar_search(agent_pos, goal, walls, grid_size,
+                                         heuristic_type='manhattan', percept=percept)
             else:
                 raise ValueError(f"Unknown active_algo: {self.active_algo}")
 
